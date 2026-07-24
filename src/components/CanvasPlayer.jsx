@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import { gsap } from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 
@@ -12,15 +12,11 @@ export default function CanvasPlayer() {
   const canvasRef = useRef(null)
   const imagesRef = useRef([])
   const currentFrameRef = useRef(0)
-  const [loadProgress, setLoadProgress] = useState(0)
-  const [isReady, setIsReady] = useState(false)
-
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
     const ctx = canvas.getContext('2d')
     const images = imagesRef.current
-    let loadedCount = 0
     let isDestroyed = false
 
     // Cached gradient instances to avoid GC allocations during scroll
@@ -104,29 +100,22 @@ export default function CanvasPlayer() {
       }
     }
 
-    /* ── PROGRESSIVE BATCH PRELOADER (Eliminates Initial Loading Lag) ── */
-    // Step 1: Priority load Frame 1 immediately
+    /* ── SILENT BACKGROUND FRAME STREAMING (Zero Loaders, Instant Site Open) ── */
     const img1 = new Image()
     img1.decoding = 'async'
     img1.src = frameUrl(1)
     img1.onload = () => {
       if (isDestroyed) return
       images[0] = img1
-      loadedCount++
       drawFrame(0)
-      setLoadProgress(Math.round((loadedCount / FRAME_COUNT) * 100))
     }
     images[0] = img1
 
-    // Step 2: Stream remaining frames in smooth batches of 8 without choking browser
     const BATCH_SIZE = 8
     let currentIndex = 1
 
     function loadNextBatch() {
-      if (isDestroyed || currentIndex >= FRAME_COUNT) {
-        setIsReady(true)
-        return
-      }
+      if (isDestroyed || currentIndex >= FRAME_COUNT) return
       const end = Math.min(currentIndex + BATCH_SIZE, FRAME_COUNT)
       let batchFinished = 0
       const batchTotal = end - currentIndex
@@ -137,16 +126,7 @@ export default function CanvasPlayer() {
         img.src = frameUrl(i + 1)
         const onFinish = () => {
           if (isDestroyed) return
-          loadedCount++
           batchFinished++
-          const pct = Math.round((loadedCount / FRAME_COUNT) * 100)
-          setLoadProgress(pct)
-
-          // Mark UI ready after initial hero batch (15 frames loaded)
-          if (loadedCount >= 15) {
-            setIsReady(true)
-          }
-
           if (batchFinished === batchTotal) {
             currentIndex = end
             if ('requestIdleCallback' in window) {
@@ -162,7 +142,6 @@ export default function CanvasPlayer() {
       }
     }
 
-    // Start background batch streaming shortly after first frame
     const timer = setTimeout(loadNextBatch, 40)
 
     window.addEventListener('resize', resize, { passive: true })
@@ -201,51 +180,12 @@ export default function CanvasPlayer() {
   }, [])
 
   return (
-    <>
-      {/* Sleek Initial Glass Preloader Overlay */}
-      <div
-        className={`fixed inset-0 z-[9999] bg-[#0A0B0E] flex flex-col items-center justify-center transition-opacity duration-600 ${
-          isReady ? 'opacity-0 pointer-events-none' : 'opacity-100'
-        }`}
-      >
-        <div className="flex flex-col items-center gap-4 text-center px-4">
-          <span className="text-4xl animate-bounce">🚌</span>
-          <div className="flex items-center gap-1.5">
-            <span className="font-mono text-xs text-amber-sizzle tracking-widest font-bold">THE</span>
-            <span className="mandalay-script-logo text-3xl sm:text-4xl">Mandalay</span>
-            <span className="font-display font-black text-sm text-cream-warm tracking-wider">BUS</span>
-          </div>
-          <div className="w-56 h-1.5 bg-white/10 rounded-full overflow-hidden mt-3 shadow-inner">
-            <div
-              className="h-full bg-gradient-to-r from-amber-sizzle via-gold-burma to-crimson-cyber transition-all duration-300 rounded-full"
-              style={{ width: `${loadProgress}%` }}
-            />
-          </div>
-          <span className="font-mono text-[11px] uppercase tracking-widest text-cream-warm/50 mt-1">
-            Loading Street Food Experience... {loadProgress}%
-          </span>
-        </div>
-      </div>
-
-      {/* Top thin progress bar while remaining frames stream in background */}
-      {loadProgress < 100 && (
-        <div
-          className="loading-bar"
-          style={{ width: `${loadProgress}%` }}
-          role="progressbar"
-          aria-valuenow={loadProgress}
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-label="Loading frames"
-        />
-      )}
-      <canvas
-        ref={canvasRef}
-        id="canvas-player"
-        className="fixed inset-0 pointer-events-none"
-        style={{ zIndex: 0, width: '100vw', height: '100vh', display: 'block' }}
-        aria-hidden="true"
-      />
-    </>
+    <canvas
+      ref={canvasRef}
+      id="canvas-player"
+      className="fixed inset-0 pointer-events-none"
+      style={{ zIndex: 0, width: '100vw', height: '100vh', display: 'block' }}
+      aria-hidden="true"
+    />
   )
 }
